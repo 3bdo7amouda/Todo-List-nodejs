@@ -30,7 +30,7 @@ app.use(express.static('assets'));
 
 // registering the user in the database
 app.post('/register', (req, res) => {
-    Register.create({
+    User.create({
         name: req.body.name,
         lastName: req.body.lastName,
         phone: req.body.phone,
