@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: todo-app-config
+  namespace: todo-app
+data:
+  NODE_ENV: "production"
+  PORT: "4000"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-app
+  namespace: todo-app
+  labels:
+    app: todo-app
+    component: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: todo-app
+  template:
+    metadata:
+      labels:
+        app: todo-app
+        component: frontend
+    spec:
+      containers:
+      - name: todo-app
+        image: your-registry.com/todo-list-nodejs:latest
+        ports:
+        - containerPort: 4000
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: todo-app-config
+              key: NODE_ENV
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: todo-app-config
+              key: PORT
+        - name: mongoDbUrl
+          value: "mongodb://$(MONGO_USERNAME):$(MONGO_PASSWORD)@mongodb-service:27017/$(MONGO_DATABASE)?authSource=admin"
+        - name: MONGO_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: username
+        - name: MONGO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: password
+        - name: MONGO_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: database
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 4000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 4000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        imagePullPolicy: Always
+      imagePullSecrets:
+      - name: registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-app-service
+  namespace: todo-app
+  labels:
+    app: todo-app
+spec:
+  selector:
+    app: todo-app
+  ports:
+  - port: 80
+    targetPort: 4000
+    protocol: TCP
+  type: ClusterIP
