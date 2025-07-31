@@ -51,6 +51,6 @@ jobs:
     - name: Image built successfully
       if: success()
       run: |
-        echo "✅ Docker image built and pushed successfully!"
-        echo "🐳 Image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest"
-        echo "📋 Available tags: ${{ steps.meta.outputs.tags }}"
+        echo " Docker image built and pushed successfully!"
+        echo " Image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest"
+        echo " Available tags: ${{ steps.meta.outputs.tags }}"
