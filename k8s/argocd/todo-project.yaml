@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: todo-project
+  namespace: argocd
+spec:
+  description: Todo List Application Project
+  sourceRepos:
+  - 'https://github.com/3bdo7amouda/Todo-List-nodejs.git'
+  destinations:
+  - namespace: todo-app
+    server: https://kubernetes.default.svc
+  - namespace: argocd
+    server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: networking.k8s.io
+    kind: Ingress
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: '*'
+  - group: apps
+    kind: '*'
+  - group: networking.k8s.io
+    kind: '*'
+  - group: autoscaling
+    kind: '*'
+  roles:
+  - name: admin
+    description: Admin access to todo project
+    policies:
+    - p, proj:todo-project:admin, applications, *, todo-project/*, allow
+    - p, proj:todo-project:admin, repositories, *, *, allow
+    groups:
+    - argocd-admins
