@@ -13,15 +13,18 @@ WORKDIR /usr/src/app
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Copy package.json and package-lock.json (if available)
-COPY --chown=nodejs:nodejs package*.json ./
+# Copy package.json and package-lock.json first (for better caching)
+COPY package*.json ./
 
-# Switch to nodejs user for npm install
-USER nodejs
-
-# Install app dependencies with exact versions for reproducible builds
-RUN npm ci --only=production && \
+# Install production dependencies as root first
+RUN npm ci --only=production --no-audit --no-fund && \
     npm cache clean --force
+
+# Change ownership of node_modules to nodejs user
+RUN chown -R nodejs:nodejs /usr/src/app
+
+# Switch to nodejs user for copying application files
+USER nodejs
 
 # Copy the rest of the application code
 COPY --chown=nodejs:nodejs . .
