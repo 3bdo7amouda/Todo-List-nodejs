@@ -1,7 +1,7 @@
 ---
 - name: Deploy Todo App with Docker Compose
   hosts: todo_servers
-  become_user: ubuntu
+  become: yes
   gather_facts: no
   
   vars:
@@ -15,7 +15,6 @@
         owner: ubuntu
         group: ubuntu
         mode: '0755'
-      become: yes
 
     - name: Copy application files to servers
       copy:
@@ -24,7 +23,6 @@
         owner: ubuntu
         group: ubuntu
         mode: '0644'
-      become: yes
       loop:
         - { src: "../../docker-compose.yml", dest: "docker-compose.yml" }
         - { src: "../../Dockerfile", dest: "Dockerfile" }
@@ -38,7 +36,6 @@
         owner: ubuntu
         group: ubuntu
         mode: '0600'
-      become: yes
 
     - name: Copy directories to servers
       synchronize:
@@ -52,7 +49,6 @@
         - "../../routes"
         - "../../views"
         - "../../assets"
-      become: yes
 
     - name: Stop existing containers (if any)
       command: docker-compose down
