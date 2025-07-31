@@ -5,12 +5,8 @@
   gather_facts: no
   
   tasks:
-    - name: Check if Docker is running
-      command: docker --version
-      register: docker_status
-
-    - name: Show running containers
-      command: docker ps
+    - name: Check running containers
+      command: docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
       register: containers_list
 
     - name: Check application health
@@ -23,13 +19,9 @@
       delegate_to: localhost
       ignore_errors: yes
 
-    - name: Display server status
+    - name: Display status
       debug:
         msg: |
           Server: {{ inventory_hostname }} ({{ ansible_host }})
-          Docker: {{ docker_status.stdout }}
-          App Status: {{ 'Running ✅' if app_health.status == 200 else 'Not Running ❌' }}
-
-    - name: Display running containers
-      debug:
-        msg: "{{ containers_list.stdout_lines }}"
+          App: {{ 'Running ✅' if app_health.status == 200 else 'Not Running ❌' }}
+          Containers: {{ containers_list.stdout_lines[1:] | join(', ') if containers_list.stdout_lines|length > 1 else 'None' }}

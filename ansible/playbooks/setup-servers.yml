@@ -8,21 +8,16 @@
     - name: Update system packages
       apt:
         update_cache: yes
-        upgrade: dist
         cache_valid_time: 3600
 
-    - name: Install required system packages
+    - name: Install essential packages
       apt:
         name:
           - curl
-          - wget
           - git
-          - software-properties-common
           - apt-transport-https
           - ca-certificates
           - gnupg
-          - lsb-release
-          - ufw
         state: present
 
     - name: Add Docker GPG key
@@ -41,11 +36,10 @@
           - docker-ce
           - docker-ce-cli
           - containerd.io
-          - docker-buildx-plugin
           - docker-compose-plugin
         state: present
 
-    - name: Start and enable Docker service
+    - name: Start Docker service
       systemd:
         name: docker
         state: started
@@ -57,59 +51,21 @@
         groups: docker
         append: yes
 
-    - name: Install Docker Compose standalone (for compatibility)
+    - name: Install Docker Compose standalone
       get_url:
         url: "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64"
         dest: /usr/local/bin/docker-compose
         mode: '0755'
 
-    - name: Create application directory
-      file:
-        path: /opt/todo-app
-        state: directory
-        owner: ubuntu
-        group: ubuntu
-        mode: '0755'
-
-    - name: Configure UFW firewall
-      ufw:
-        state: enabled
-        policy: deny
-        direction: incoming
-
-    - name: Open firewall ports
-      ufw:
-        rule: allow
-        port: "{{ item }}"
-      loop:
-        - '22'
-        - '80'
-        - '443'
-        - '4000'
+    - name: Open port 4000 in security group (AWS handles firewall)
+      debug:
+        msg: "Ensure port 4000 is open in AWS Security Group"
 
     - name: Test Docker installation
       command: docker --version
       register: docker_version
       become_user: ubuntu
 
-    - name: Display Docker version
-      debug:
-        msg: "✅ Docker installed: {{ docker_version.stdout }}"
-
-    - name: Test Docker Compose installation
-      command: docker-compose --version
-      register: compose_version
-      become_user: ubuntu
-
-    - name: Display Docker Compose version
-      debug:
-        msg: "✅ Docker Compose installed: {{ compose_version.stdout }}"
-
-    - name: Verify Docker service is running
-      command: docker info
-      register: docker_info
-      become_user: ubuntu
-
     - name: Display setup completion
       debug:
-        msg: "✅ Server {{ inventory_hostname }} ({{ ansible_host }}) is ready for deployment!"
+        msg: "✅ {{ inventory_hostname }} ready - {{ docker_version.stdout }}"
