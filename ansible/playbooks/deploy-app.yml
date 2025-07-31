@@ -1,0 +1,115 @@
+---
+- name: Deploy Todo App with Docker Compose
+  hosts: todo_servers
+  become_user: ubuntu
+  gather_facts: no
+  
+  vars:
+    app_dir: /opt/todo-app
+    github_repo: "https://github.com/your-username/Todo-List-nodejs.git"
+  
+  tasks:
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+      become: yes
+
+    - name: Clone Todo app repository
+      git:
+        repo: "{{ github_repo }}"
+        dest: "{{ app_dir }}"
+        force: yes
+      become: yes
+      become_user: ubuntu
+
+    - name: Copy docker-compose.yml to servers
+      copy:
+        src: "../../docker-compose.yml"
+        dest: "{{ app_dir }}/docker-compose.yml"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      become: yes
+
+    - name: Copy .env file to servers
+      copy:
+        src: "../../.env"
+        dest: "{{ app_dir }}/.env"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+      become: yes
+
+    - name: Copy Dockerfile to servers
+      copy:
+        src: "../../Dockerfile"
+        dest: "{{ app_dir }}/Dockerfile"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      become: yes
+
+    - name: Copy package.json to servers
+      copy:
+        src: "../../package.json"
+        dest: "{{ app_dir }}/package.json"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      become: yes
+
+    - name: Stop existing containers
+      command: docker-compose down
+      args:
+        chdir: "{{ app_dir }}"
+      become_user: ubuntu
+      ignore_errors: yes
+
+    - name: Remove old images
+      command: docker-compose down --rmi all
+      args:
+        chdir: "{{ app_dir }}"
+      become_user: ubuntu
+      ignore_errors: yes
+
+    - name: Build and start containers
+      command: docker-compose up -d --build
+      args:
+        chdir: "{{ app_dir }}"
+      become_user: ubuntu
+
+    - name: Wait for application to be ready
+      wait_for:
+        port: 4000
+        host: "{{ ansible_host }}"
+        delay: 15
+        timeout: 300
+      delegate_to: localhost
+
+    - name: Check if application is running
+      uri:
+        url: "http://{{ ansible_host }}:4000"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: app_status
+      delegate_to: localhost
+      retries: 3
+      delay: 5
+
+    - name: Display deployment status
+      debug:
+        msg: "✅ Todo app deployed successfully on {{ ansible_host }}:4000"
+
+    - name: Show running containers
+      command: docker ps
+      register: containers_status
+      become_user: ubuntu
+
+    - name: Display container status
+      debug:
+        msg: "{{ containers_status.stdout_lines }}"
