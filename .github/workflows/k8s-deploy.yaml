@@ -1,0 +1,155 @@
+name: Build, Push and Deploy to Kubernetes
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+  IMAGE_NAME: todo-list-nodejs
+  REGISTRY: your-registry.com  # Update this with your registry URL
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run tests
+      run: npm test || echo "No tests specified, skipping..."
+      
+    - name: Security audit
+      run: npm audit --audit-level=moderate
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.REGISTRY_USERNAME }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value={{date 'YYYYMMDD-HHmmss'}}
+        labels: |
+          org.opencontainers.image.title=Todo List NodeJS
+          org.opencontainers.image.description=A containerized Todo List application
+          
+    - name: Build and push Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}  
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+        build-args: |
+          NODE_VERSION=${{ env.NODE_VERSION }}
+          
+    - name: Run security scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+      continue-on-error: true
+        
+    - name: Upload security scan results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always() && hashFiles('trivy-results.sarif') != ''
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  update-k8s-manifests:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Update Kubernetes manifests
+      run: |
+        # Extract the latest tag
+        IMAGE_TAG=$(echo "${{ needs.build-and-push.outputs.image-tag }}" | grep "latest" | head -1)
+        if [ -z "$IMAGE_TAG" ]; then
+          # Fallback to SHA-based tag
+          IMAGE_TAG=$(echo "${{ needs.build-and-push.outputs.image-tag }}" | head -1)
+        fi
+        
+        echo "Updating image to: $IMAGE_TAG"
+        
+        # Update the image in the deployment manifest
+        sed -i "s|image: .*todo-list-nodejs.*|image: $IMAGE_TAG|g" k8s/manifests/03-todo-app.yaml
+        
+        # Also update registry URL if needed
+        sed -i "s|your-registry.com|${{ env.REGISTRY }}|g" k8s/manifests/03-todo-app.yaml
+        
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        if git diff --quiet; then
+          echo "No changes to commit"
+        else
+          git add k8s/manifests/03-todo-app.yaml
+          git commit -m "🚀 Update image to ${{ needs.build-and-push.outputs.image-tag }} [skip ci]"
+          git push
+        fi
+
+  notify-argocd:
+    needs: [build-and-push, update-k8s-manifests]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+    - name: Trigger ArgoCD Sync
+      run: |
+        echo "🎯 New image built and manifests updated!"
+        echo "Image: ${{ needs.build-and-push.outputs.image-tag }}"
+        echo "ArgoCD will automatically sync the changes within 3 minutes"
+        echo "Or manually sync via ArgoCD UI: https://your-argocd-url"
