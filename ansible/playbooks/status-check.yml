@@ -1,0 +1,35 @@
+---
+- name: Check Todo App Status
+  hosts: todo_servers
+  become_user: ubuntu
+  gather_facts: no
+  
+  tasks:
+    - name: Check if Docker is running
+      command: docker --version
+      register: docker_status
+
+    - name: Show running containers
+      command: docker ps
+      register: containers_list
+
+    - name: Check application health
+      uri:
+        url: "http://{{ ansible_host }}:4000"
+        method: GET
+        status_code: 200
+        timeout: 5
+      register: app_health
+      delegate_to: localhost
+      ignore_errors: yes
+
+    - name: Display server status
+      debug:
+        msg: |
+          Server: {{ inventory_hostname }} ({{ ansible_host }})
+          Docker: {{ docker_status.stdout }}
+          App Status: {{ 'Running ✅' if app_health.status == 200 else 'Not Running ❌' }}
+
+    - name: Display running containers
+      debug:
+        msg: "{{ containers_list.stdout_lines }}"

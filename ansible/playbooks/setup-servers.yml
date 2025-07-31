@@ -22,6 +22,7 @@
           - ca-certificates
           - gnupg
           - lsb-release
+          - ufw
         state: present
 
     - name: Add Docker GPG key
@@ -70,6 +71,12 @@
         group: ubuntu
         mode: '0755'
 
+    - name: Configure UFW firewall
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
     - name: Open firewall ports
       ufw:
         rule: allow
@@ -87,7 +94,7 @@
 
     - name: Display Docker version
       debug:
-        msg: "Docker installed: {{ docker_version.stdout }}"
+        msg: "✅ Docker installed: {{ docker_version.stdout }}"
 
     - name: Test Docker Compose installation
       command: docker-compose --version
@@ -96,4 +103,13 @@
 
     - name: Display Docker Compose version
       debug:
-        msg: "Docker Compose installed: {{ compose_version.stdout }}"
+        msg: "✅ Docker Compose installed: {{ compose_version.stdout }}"
+
+    - name: Verify Docker service is running
+      command: docker info
+      register: docker_info
+      become_user: ubuntu
+
+    - name: Display setup completion
+      debug:
+        msg: "✅ Server {{ inventory_hostname }} ({{ ansible_host }}) is ready for deployment!"
